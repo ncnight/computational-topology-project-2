@@ -141,6 +141,37 @@ def plot_tsne(distance_matrix, colors8, description, fig, pos):
     plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
     plt.title(description)
 
+def get_color_vector():
+    colors = ['red', 'blue', 'green', 'purple', 'blue', 'pink', 'grey', 'cyan', 'magenta', 'yellow']
+    colors8 = []
+    for color in colors:
+        for _ in range(8):
+            colors8.append(color)
+    return colors8
+
+def visualize_original_mpeg_png(mpeg_loc):
+    print("Visualizing 80 mpeg images using t-SNE and MDS")
+    pictures = [mpeg_loc + f for f in listdir(mpeg_loc) if isfile(join(mpeg_loc, f))]
+    dataset = []
+    for counter, pic in enumerate(pictures):
+        im = Image.open(pic)
+        im = im.resize((256,256), Image.ANTIALIAS)
+        mpeg = np.asarray(im)
+        dataset.append(mpeg.flatten())
+
+    colors8 = get_color_vector()
+    #TSNE
+    embedding = manifold.TSNE(n_components=2)
+    transformed = embedding.fit_transform(dataset)
+    plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
+    plt.show()
+
+    #MDS
+    embedding = manifold.MDS(n_components=2)
+    transformed = embedding.fit_transform(dataset)
+    plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
+    plt.show()
+
 def main():
     if len(sys.argv) == 1:
         print("Select a routine to run!")
@@ -150,6 +181,7 @@ def main():
         sys.argv.append('-gen-point-cloud')
         sys.argv.append('-run-ripser')
         sys.argv.append('-run-hera-and-plot')
+        sys.argv.append('-vis-mpeg')
     if '-gen-png' in sys.argv :
         generate_png('../data/originals/')
     if '-gen-point-cloud' in sys.argv:
@@ -159,11 +191,7 @@ def main():
     if '-run-hera-and-plot' in sys.argv:
         fig_was = plt.figure(1)
         fig_was.suptitle("Wasserstein Graphs")
-        colors = ['red', 'blue', 'green', 'purple', 'blue', 'pink', 'grey', 'cyan', 'magenta', 'yellow']
-        colors8 = []
-        for color in colors:
-            for _ in range(8):
-                colors8.append(color)
+        colors8 = get_color_vector()
         distance_matrix = run_hera(distance="wasserstein", dim="dim0")
         plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 0 (MDS)", fig_was, 221)
         plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 0 (t-SNE)", fig_was, 222)
@@ -184,6 +212,8 @@ def main():
         plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (MDS)", fig_bottle, 223)
         plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (t-SNE)", fig_bottle, 224)
         plt.show()
+    if '-vis-mpeg' in sys.argv:
+        visualize_original_mpeg_png("../data/original_png/")
 
 
 if __name__ == '__main__':
