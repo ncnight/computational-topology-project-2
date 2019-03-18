@@ -157,32 +157,32 @@ def main():
     if '-run-ripser' in sys.argv:
         run_ripser('../ripser/ripser', '../data/point_clouds/', '../data/ripser_outputs/')
     if '-run-hera-and-plot' in sys.argv:
-        fig_mds = plt.figure(1)
-        fig_mds.suptitle("MDS Graphs")
-        fig_tsne = plt.figure(2)
-        fig_tsne.suptitle("t-SNE Graphs")
+        fig_was = plt.figure(1)
+        fig_was.suptitle("Wasserstein Graphs")
         colors = ['red', 'blue', 'green', 'purple', 'blue', 'pink', 'grey', 'cyan', 'magenta', 'yellow']
         colors8 = []
         for color in colors:
             for _ in range(8):
                 colors8.append(color)
         distance_matrix = run_hera(distance="wasserstein", dim="dim0")
-        plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 0", fig_mds, 221)
-        plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 0", fig_tsne, 221)
+        plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 0 (MDS)", fig_was, 221)
+        plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 0 (t-SNE)", fig_was, 222)
 
         distance_matrix = run_hera(distance="wasserstein", dim="dim1")
-        plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 1", fig_mds, 222)
-        plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 1", fig_tsne, 222)
+        plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 1 (MDS)", fig_was, 223)
+        plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 1 (t-SNE)", fig_was, 224)
+        plt.show()
 
+        plt.close(fig_was)
+        fig_bottle = plt.figure(2)
+        fig_bottle.suptitle("Bottleneck Graphs")
         distance_matrix = run_hera(distance="geom_bottleneck", dim="dim1")
-        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_mds, 224)
-        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_tsne, 224)
+        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (MDS)", fig_bottle, 221)
+        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (t-SNE)", fig_bottle, 222)
 
         distance_matrix = run_hera(distance="geom_bottleneck", dim="dim0")
-        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_mds, 223)
-        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_tsne, 223)
-
-
+        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (MDS)", fig_bottle, 223)
+        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (t-SNE)", fig_bottle, 224)
         plt.show()
 
 
