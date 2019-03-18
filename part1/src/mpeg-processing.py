@@ -141,8 +141,20 @@ def plot_tsne(distance_matrix, colors8, description, fig, pos):
     plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
     plt.title(description)
 
+"""
+apple = blue 
+bird = green
+bone = red 
+children = cyan
+face = magenta
+fork = yellow
+horseshoe = black
+pencil = grey
+spoon = pink
+watch = orange
+"""
 def get_color_vector():
-    colors = ['red', 'blue', 'green', 'purple', 'blue', 'pink', 'grey', 'cyan', 'magenta', 'yellow']
+    colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'grey', 'pink', 'orange']
     colors8 = []
     for color in colors:
         for _ in range(8):
