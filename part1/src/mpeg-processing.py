@@ -10,6 +10,7 @@ from os.path import isfile, join
 from PIL import Image
 import sys
 import subprocess as sp
+import re
 
 def is_white(pixel):
     return pixel != 0
@@ -59,7 +60,7 @@ def create_point_cloud_files(img_dir):
         points_file.close()
 
 def run_ripser(ripser_loc, point_cloud_dir, output_loc):
-    print('Running ripser')
+    print('Running ripser...')
     clouds = [point_cloud_dir + f for f in listdir(point_cloud_dir) if isfile(join(point_cloud_dir, f))]
     ripser_cmd = [ripser_loc, '--format', 'point-cloud']
     for cloud in clouds:
@@ -70,11 +71,19 @@ def run_ripser(ripser_loc, point_cloud_dir, output_loc):
         with open(cloud.replace(point_cloud_dir, output_loc).replace('.txt', '-dim0.txt'), 'w') as f:
             for line in dims[0].split('\n'):
                 if line[0:2] == ' [':
-                    f.write(line)
+                    line_split = re.split("[\[,)]", line)
+                    f.write(line_split[1])
+                    f.write(" ")
+                    f.write(line_split[2])
+                    f.write("\n")
         with open(cloud.replace(point_cloud_dir, output_loc).replace('.txt', '-dim1.txt'), 'w') as f:
-            for line in dims[0].split('\n'):
+            for line in dims[1].split('\n'):
                 if line[0:2] == ' [':
-                    f.write(line)
+                    line_split = re.split("[\[,)]", line)
+                    f.write(line_split[1])
+                    f.write(" ")
+                    f.write(line_split[2])
+                    f.write("\n")
         del ripser_cmd[-1]
 
 def main():
