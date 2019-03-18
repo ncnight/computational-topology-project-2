@@ -11,6 +11,8 @@ from PIL import Image
 import sys
 import subprocess as sp
 import re
+from matplotlib import pyplot as plt
+from sklearn import manifold
 
 def is_white(pixel):
     return pixel != 0
@@ -93,14 +95,14 @@ def run_hera(PH_barcode_loc="../data/ripser_outputs/", point_cloud_loc="../data/
     print("Running hera with " + distance + " on " + dim + "...")
     barcodes = [PH_barcode_loc + f.replace(".txt", "-" + dim + ".txt") for f in listdir(point_cloud_loc) if
                 isfile(join(point_cloud_loc, f))]
-    barcodes.sort()
+    barcodes = sorted(barcodes, key=lambda s: s.casefold())
     try:
         distance_matrix = np.load("../data/hera_output/" + distance + "-" + dim + ".npy")
         print("Found saved matrix for " + distance + " " + dim)
         return distance_matrix
     except IOError:
         print("Couldn't find matrix for " + distance + " " + dim + ". Generating...")
-    distance_matrix = np.ones((80,80))
+    distance_matrix = np.ones((80,80), dtype=np.float64)
     if distance == "geom_bottleneck":
         executable = distance + "/build/" + "bottleneck_dist"
     else:
@@ -111,8 +113,33 @@ def run_hera(PH_barcode_loc="../data/ripser_outputs/", point_cloud_loc="../data/
             hera_cmd = [hera_loc, b1, b2]
             finished_hera = sp.run(hera_cmd, stdout=sp.PIPE, check=True,  encoding="utf-8")
             distance_matrix[counter1, counter2] = float(finished_hera.stdout.strip())
+    #Correcting float precision errors
+    for i in range(80):
+        for j in range(80):
+            if distance_matrix[i, j] != distance_matrix[j, i]:
+                if distance_matrix[i,j] - distance_matrix[j,i] <=1e-4:
+                    distance_matrix[i, j] = distance_matrix[j, i]
+                else:
+                    print("Float precision error")
+                    print(barcodes[i] + " " + barcodes[j])
+                    print(distance_matrix[i,j])
+                    print(distance_matrix[j,i])
     np.save("../data/hera_output/" + distance + "-" + dim, distance_matrix)
     return distance_matrix
+
+def plot_mds(distance_matrix, colors8, description, fig, pos):
+    fig.add_subplot(pos)
+    embedding = manifold.MDS(n_components=2, dissimilarity='precomputed')
+    transformed = embedding.fit_transform(distance_matrix)
+    plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
+    plt.title(description)
+
+def plot_tsne(distance_matrix, colors8, description, fig, pos):
+    fig.add_subplot(pos)
+    embedding = manifold.TSNE(n_components=2, metric='precomputed')
+    transformed = embedding.fit_transform(distance_matrix)
+    plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
+    plt.title(description)
 
 def main():
     if len(sys.argv) == 1:
@@ -122,17 +149,42 @@ def main():
         sys.argv.append('-gen-png')
         sys.argv.append('-gen-point-cloud')
         sys.argv.append('-run-ripser')
-        sys.argv.append('-run-hera')
+        sys.argv.append('-run-hera-and-plot')
     if '-gen-png' in sys.argv :
         generate_png('../data/originals/')
     if '-gen-point-cloud' in sys.argv:
         create_point_cloud_files('../data/original_png/')
     if '-run-ripser' in sys.argv:
         run_ripser('../ripser/ripser', '../data/point_clouds/', '../data/ripser_outputs/')
-    if '-run-hera' in sys.argv:
-        run_hera(distance="wasserstein", dim="dim0")
-        run_hera(distance="wasserstein", dim="dim1")
-        run_hera(distance="geom_bottleneck", dim="dim0")
-        run_hera(distance="geom_bottleneck", dim="dim1")
+    if '-run-hera-and-plot' in sys.argv:
+        fig_mds = plt.figure(1)
+        fig_mds.suptitle("MDS Graphs")
+        fig_tsne = plt.figure(2)
+        fig_tsne.suptitle("t-SNE Graphs")
+        colors = ['red', 'blue', 'green', 'purple', 'blue', 'pink', 'grey', 'cyan', 'magenta', 'yellow']
+        colors8 = []
+        for color in colors:
+            for _ in range(8):
+                colors8.append(color)
+        distance_matrix = run_hera(distance="wasserstein", dim="dim0")
+        plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 0", fig_mds, 221)
+        plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 0", fig_tsne, 221)
+
+        distance_matrix = run_hera(distance="wasserstein", dim="dim1")
+        plot_mds(distance_matrix, colors8, "Wasserstein Distance in Dim 1", fig_mds, 222)
+        plot_tsne(distance_matrix, colors8, "Wasserstein Distance in Dim 1", fig_tsne, 222)
+
+        distance_matrix = run_hera(distance="geom_bottleneck", dim="dim1")
+        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_mds, 224)
+        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_tsne, 224)
+
+        distance_matrix = run_hera(distance="geom_bottleneck", dim="dim0")
+        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_mds, 223)
+        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0", fig_tsne, 223)
+
+
+        plt.show()
+
+
 if __name__ == '__main__':
     main()
