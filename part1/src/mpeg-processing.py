@@ -74,6 +74,8 @@ def run_ripser(ripser_loc, point_cloud_dir, output_loc):
                     line_split = re.split("[\[,)]", line)
                     f.write(line_split[1])
                     f.write(" ")
+                    if line_split[2] == " ":
+                        line_split[2] = "100" #high persistence to indicate the feature doesn't die
                     f.write(line_split[2])
                     f.write("\n")
         with open(cloud.replace(point_cloud_dir, output_loc).replace('.txt', '-dim1.txt'), 'w') as f:
@@ -86,6 +88,32 @@ def run_ripser(ripser_loc, point_cloud_dir, output_loc):
                     f.write("\n")
         del ripser_cmd[-1]
 
+
+def run_hera(PH_barcode_loc="../data/ripser_outputs/", point_cloud_loc="../data/point_clouds/", distance="geom_bottleneck", dim="dim0"):
+    print("Running hera with " + distance + " on " + dim + "...")
+    barcodes = [PH_barcode_loc + f.replace(".txt", "-" + dim + ".txt") for f in listdir(point_cloud_loc) if
+                isfile(join(point_cloud_loc, f))]
+    barcodes.sort()
+    try:
+        distance_matrix = np.load("../data/hera_output/" + distance + "-" + dim + ".npy")
+        print("Found saved matrix for " + distance + " " + dim)
+        return distance_matrix
+    except IOError:
+        print("Couldn't find matrix for " + distance + " " + dim + ". Generating...")
+    distance_matrix = np.ones((80,80))
+    if distance == "geom_bottleneck":
+        executable = distance + "/build/" + "bottleneck_dist"
+    else:
+        executable = "geom_matching/wasserstein/build/wasserstein_dist"
+    hera_loc = "../hera/" + executable
+    for counter1, b1 in enumerate(barcodes):
+        for counter2, b2 in enumerate(barcodes):
+            hera_cmd = [hera_loc, b1, b2]
+            finished_hera = sp.run(hera_cmd, stdout=sp.PIPE, check=True,  encoding="utf-8")
+            distance_matrix[counter1, counter2] = float(finished_hera.stdout.strip())
+    np.save("../data/hera_output/" + distance + "-" + dim, distance_matrix)
+    return distance_matrix
+
 def main():
     if len(sys.argv) == 1:
         print("Select a routine to run!")
@@ -94,12 +122,17 @@ def main():
         sys.argv.append('-gen-png')
         sys.argv.append('-gen-point-cloud')
         sys.argv.append('-run-ripser')
+        sys.argv.append('-run-hera')
     if '-gen-png' in sys.argv :
         generate_png('../data/originals/')
     if '-gen-point-cloud' in sys.argv:
         create_point_cloud_files('../data/original_png/')
     if '-run-ripser' in sys.argv:
         run_ripser('../ripser/ripser', '../data/point_clouds/', '../data/ripser_outputs/')
-
+    if '-run-hera' in sys.argv:
+        run_hera(distance="wasserstein", dim="dim0")
+        run_hera(distance="wasserstein", dim="dim1")
+        run_hera(distance="geom_bottleneck", dim="dim0")
+        run_hera(distance="geom_bottleneck", dim="dim1")
 if __name__ == '__main__':
     main()
