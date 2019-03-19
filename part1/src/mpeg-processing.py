@@ -164,6 +164,7 @@ def get_color_vector():
 def visualize_original_mpeg_png(mpeg_loc):
     print("Visualizing 80 mpeg images using t-SNE and MDS")
     pictures = [mpeg_loc + f for f in listdir(mpeg_loc) if isfile(join(mpeg_loc, f))]
+    pictures = sorted(pictures, key=lambda s: s.casefold())
     dataset = []
     for counter, pic in enumerate(pictures):
         im = Image.open(pic)
