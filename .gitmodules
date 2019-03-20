@@ -1,3 +1,0 @@
-[submodule "part2/src/sklearn_tda"]
-	path = part2/src/sklearn_tda
-	url = https://github.com/MathieuCarriere/sklearn_tda.git
