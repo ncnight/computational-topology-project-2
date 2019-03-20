@@ -5,6 +5,7 @@ from PIL import Image
 from os import listdir
 from os.path import isfile, join
 import sklearn_tda as tda
+import matplotlib.pyplot as plt
 
 """
 Constants
@@ -36,7 +37,7 @@ def generate_test_and_training_set_raw(img_dir, test_num=7):
             x_train.append(png)
             y_train.append(label)
 
-    return (x_train, y_train, x_test, y_test)
+    return (x_train, np.asarray(y_train), x_test, np.asarray(y_test))
 
 def generate_256x256_img(img_files):
     img_vecs = []
@@ -75,6 +76,28 @@ def split_distance_matrix(distance_matrix, test_num=7):
     test_matrix = np.delete(test_matrix, slices, axis=1)
     return train_matrix, test_matrix
 
+def split_image_matrix(imgs, test_num=7):
+    x_train = []
+    x_test = []
+    y_train = []
+    y_test = []
+    label = 0
+    for count, img in enumerate(imgs):
+        if count % 10 == 0 and count != 0:
+            label += 1
+        if count % 10 == test_num:
+            x_test.append(img)
+            y_test.append(label)
+        else:
+            x_train.append(img)
+            y_train.append(label)
+
+    x_test = np.asarray(x_test)[:, 0, :]
+    x_train = np.asarray(x_train)[:, 0, :]
+    y_test = np.asarray(y_test)
+    y_train = np.asarray(y_train)
+    return (x_train, y_train, x_test, y_test)
+
 def persistence_scale_kernel(X, Y, PSS_kernel=None):
     if PSS_kernel is None:
         PSS_kernel = tda.PersistenceScaleSpaceKernel(bandwidth=1.)
@@ -82,20 +105,22 @@ def persistence_scale_kernel(X, Y, PSS_kernel=None):
     Y_fit = PSS_kernel.transform([np.asarray(Y)])
     return Y_fit[0][0], PSS_kernel
 
-def cross_validate_10_fold(model, data_dir, distance_matrix=None):
+def cross_validate_10_fold(model, data_dir, distance_matrix=None, PI=None):
     best_test_acc = 0
     best_train_acc = 0
     worst_test_acc = 2 # larger than 100%
     worst_train_acc = 2
     for y_loc in range(8):
-        x_train, y_train, x_test, y_test = generate_test_and_training_set_raw(data_dir, test_num=y_loc)
+        if PI is None:
+            x_train, y_train, x_test, y_test = generate_test_and_training_set_raw(data_dir, test_num=y_loc)
+        else:
+            x_train, y_train, x_test, y_test = split_image_matrix(PI, test_num=y_loc)
+
         if distance_matrix is not None:
             x_train, x_test = split_distance_matrix(distance_matrix, test_num=y_loc)
-        else:
+        elif PI is None:
             x_train = generate_256x256_img(x_train)
             x_test = generate_256x256_img(x_test)
-        y_train = np.asarray(y_train)
-        y_test = np.asarray(y_test)
         fit_svm(x_train, y_train, model)
         test_acc = svm_validate(x_test, y_test, model)
         train_acc = svm_validate(x_train, y_train, model)
@@ -137,7 +162,7 @@ def compute_PSS_gram_matrix(dim="dim0", np_checkpoints=None):
     np.save(NP_CHECKPOINTS + "pss_kernel_" + dim, gram_matrix)
     return gram_matrix
 
-def optimize_C(png_dir, kernel=None, gram_matrix=None, description="SVM optimization"):
+def optimize_C(png_dir, kernel=None, PI=None, gram_matrix=None, description="SVM optimization"):
     c_values = [c / 10 for c in range(2, 18, 5)]
     best_c = -1
     best_acc = [0]
@@ -146,15 +171,36 @@ def optimize_C(png_dir, kernel=None, gram_matrix=None, description="SVM optimiza
             model = svm.SVC(C=c, gamma='scale')
         elif kernel == 'precomputed' and gram_matrix is not None:
             model = svm.SVC(C=c, kernel=kernel)
-        accuracies = cross_validate_10_fold(model=model, data_dir=png_dir, distance_matrix=gram_matrix)
+        accuracies = cross_validate_10_fold(model=model, PI=PI, data_dir=png_dir, distance_matrix=gram_matrix)
         if accuracies[0] > best_acc[0]:
             best_c = c
             best_acc = accuracies
     print_training_output(description, accuracies, C=c)
     return best_c
 
+def generate_PIs(raw_PDs,PI_dim=32, display_each_class=False):
+    PIs = []
+    for count, pd in enumerate(raw_PDs):
+        diagram_transformed = tda.DiagramPreprocessor(use=True, scalers=[([0, 1], tda.BirthPersistenceTransform())]).fit_transform(np.asarray([pd]))
+        PIs.append(tda.PersistenceImage(bandwidth=1., weight=lambda x: x[1], im_range=[0,10,0,10], resolution=[PI_dim,PI_dim]).fit_transform(diagram_transformed))
+        if display_each_class and count % 8 == 7:
+            plt.imshow(np.flip(np.reshape(PIs[-1][0], [PI_dim, PI_dim]), 0))
+            plt.show()
+    return np.asarray(PIs)
 
 def main():
+    ###PI dim0 SVM
+    PIs_dim0 = generate_PIs(convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0'))
+    optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_dim0, description="Persistent Images SVM in dim0")
+
+    ###PI dim1 SVM
+    PIs_dim1 = generate_PIs(convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0'))
+    optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_dim1, description="Persistent Images SVM in dim1")
+
+    ###Compbined PI for dim0 and dim1 SVM
+    PIs_combined = np.concatenate((PIs_dim0, PIs_dim1), axis=0)
+    optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_combined, description="Persistent Images SVM in dim0 and dim1")
+    
     ###Naive with raw images
     optimize_C(PNG_DIR, description="Raw image classification - RBF kernel with gamma=\'scale\'")
 
@@ -169,7 +215,6 @@ def main():
     ###combined pss kernel
     gram_matrix_pss = gram_matrix_pss_dim0 + gram_matrix_pss_dim1
     optimize_C(PNG_DIR, kernel='precomputed', gram_matrix=gram_matrix_pss, description="PSS kernel SVM with dim0 and dim1")
-
 
 if __name__ == '__main__':
     main()
