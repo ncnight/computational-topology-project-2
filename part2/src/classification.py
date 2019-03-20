@@ -15,6 +15,7 @@ DIM1_WASSERSTEIN = "../../part1/data/hera_output/wasserstein-dim1.npy"
 DIM0_BOTTLENECK = "../../part1/data/hera_output/geom_bottleneck-dim0.npy"
 DIM1_BOTTLENECK = "../../part1/data/hera_output/geom_bottleneck-dim1.npy"
 RIPSER_OUTPUT = "../../part1/data/ripser_outputs/"
+NP_CHECKPOINTS = "../np_checkpoints/"
 
 
 def generate_test_and_training_set_raw(img_dir, test_num=7):
@@ -52,9 +53,11 @@ def svm_validate(x_test, y_test, model):
 def fit_svm(x_train, y_train, untrainged_model):
     untrainged_model.fit(x_train, y_train)
 
-def print_training_output(description, accuracies):
+def print_training_output(description, accuracies, C=None):
     best_test_acc, best_train_acc, worst_test_acc, worst_train_acc = accuracies
     print("--------------------------" + description + "--------------------------")
+    if C is not None:
+        print("Optimal C: " + str(C))
     print("Best testing accuracy: " + str(best_test_acc) + " with training accuracy of: " + str(best_train_acc))
     print("Worst testing accuracy: " + str(worst_test_acc) + " with training accuracy of: " + str(worst_train_acc))
     print("--------------------------------------------------------------------------")
@@ -70,7 +73,6 @@ def split_distance_matrix(distance_matrix, test_num=7):
     train_matrix = np.delete(distance_matrix, slices, axis=0)
     train_matrix = np.delete(train_matrix, slices, axis=1)
     test_matrix = np.delete(test_matrix, slices, axis=1)
-    print(test_matrix.shape)
     return train_matrix, test_matrix
 
 def persistence_scale_kernel(X, Y, PSS_kernel=None):
@@ -80,7 +82,7 @@ def persistence_scale_kernel(X, Y, PSS_kernel=None):
     Y_fit = PSS_kernel.transform([np.asarray(Y)])
     return Y_fit[0][0], PSS_kernel
 
-def cross_validate(model, data_dir, distance_matrix=None):
+def cross_validate_10_fold(model, data_dir, distance_matrix=None):
     best_test_acc = 0
     best_train_acc = 0
     worst_test_acc = 2 # larger than 100%
@@ -88,7 +90,7 @@ def cross_validate(model, data_dir, distance_matrix=None):
     for y_loc in range(8):
         x_train, y_train, x_test, y_test = generate_test_and_training_set_raw(data_dir, test_num=y_loc)
         if distance_matrix is not None:
-            x_train, x_test = split_distance_matrix(distance_matrix)
+            x_train, x_test = split_distance_matrix(distance_matrix, test_num=y_loc)
         else:
             x_train = generate_256x256_img(x_train)
             x_test = generate_256x256_img(x_test)
@@ -117,25 +119,57 @@ def convert_ripser_to_np(dir, dim='dim0'):
                 feature_matrix[count].append([float(parsed[0]), float(parsed[1])])
     return np.asarray(feature_matrix)
 
+def compute_PSS_gram_matrix(dim="dim0", np_checkpoints=None):
+    if np_checkpoints is not None:
+        try:
+            gram_matrix = np.load(np_checkpoints + "pss_kernel_" + dim + ".npy")
+            print("Found saved matrix for PSS kernel in " + dim)
+            return gram_matrix
+        except IOError:
+            print("Couldn't find matrix for PSS kernel in " + dim + ". Generating...")
+    pds = convert_ripser_to_np(RIPSER_OUTPUT, dim=dim)
+    gram_matrix = np.ones((80, 80))
+    for count1, pd1 in enumerate(pds):
+        print("Starting PD " + str(count1))
+        PSS_kernel = None
+        for count2, pd2 in enumerate(pds):
+            gram_matrix[count1, count2], PSS_kernel = persistence_scale_kernel(pd1, pd2, PSS_kernel)
+    np.save(NP_CHECKPOINTS + "pss_kernel_" + dim, gram_matrix)
+    return gram_matrix
+
+def optimize_C(png_dir, kernel=None, gram_matrix=None, description="SVM optimization"):
+    c_values = [c / 10 for c in range(2, 18, 5)]
+    best_c = -1
+    best_acc = [0]
+    for c in c_values:
+        if kernel is None:
+            model = svm.SVC(C=c, gamma='scale')
+        elif kernel == 'precomputed' and gram_matrix is not None:
+            model = svm.SVC(C=c, kernel=kernel)
+        accuracies = cross_validate_10_fold(model=model, data_dir=png_dir, distance_matrix=gram_matrix)
+        if accuracies[0] > best_acc[0]:
+            best_c = c
+            best_acc = accuracies
+    print_training_output(description, accuracies, C=c)
+    return best_c
+
 
 def main():
     ###Naive with raw images
-    naive_model = svm.SVC(C=1.5, gamma="scale")
-    #accuracies = cross_validate(naive_model, PNG_DIR)
-    #print_training_output("Raw image classification with Params: C=1.5, gamma=\'scale\'", accuracies)
+    optimize_C(PNG_DIR, description="Raw image classification - RBF kernel with gamma=\'scale\'")
 
     ###Dim0 persistence scale kernel
-    persistence_scale_svm = svm.SVC(kernel='precomputed')
-    dim0_pds = convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0')
-    gram_matrix = np.ones((80, 80))
-    for count1, pd1 in enumerate(dim0_pds):
-        print("Starting PD " + str(count1))
-        PSS_kernel = None
-        for count2, pd2 in enumerate(dim0_pds):
-            print(count2)
-            gram_matrix[count1, count2], PSS_kernel = persistence_scale_kernel(pd1, pd2, PSS_kernel)
-    print(gram_matrix)
-    print(gram_matrix.shape)
-    np.save("../np_checkpoints/pss_kernel_dim0", gram_matrix)
+    gram_matrix_pss_dim0 = compute_PSS_gram_matrix(dim="dim0", np_checkpoints=NP_CHECKPOINTS)
+    optimize_C(PNG_DIR, kernel='precomputed', gram_matrix=gram_matrix_pss_dim0, description="PSS kernel SVM in dim0")
+
+    ###Dim1 persistence scale kernel
+    gram_matrix_pss_dim1 = compute_PSS_gram_matrix(dim="dim1", np_checkpoints=NP_CHECKPOINTS)
+    optimize_C(PNG_DIR, kernel='precomputed', gram_matrix=gram_matrix_pss_dim1, description="PSS kernel SVM in dim1")
+
+    ###combined pss kernel
+    gram_matrix_pss = gram_matrix_pss_dim0 + gram_matrix_pss_dim1
+    optimize_C(PNG_DIR, kernel='precomputed', gram_matrix=gram_matrix_pss, description="PSS kernel SVM with dim0 and dim1")
+
+
 if __name__ == '__main__':
     main()
