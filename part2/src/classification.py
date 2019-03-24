@@ -17,6 +17,8 @@ DIM0_BOTTLENECK = "../../part1/data/hera_output/geom_bottleneck-dim0.npy"
 DIM1_BOTTLENECK = "../../part1/data/hera_output/geom_bottleneck-dim1.npy"
 RIPSER_OUTPUT = "../../part1/data/ripser_outputs/"
 NP_CHECKPOINTS = "../np_checkpoints/"
+NUM_CLASSES = 10
+NUM_IMGS_PER_CLASS = 8
 
 
 def generate_test_and_training_set_raw(img_dir, test_num=7):
@@ -28,15 +30,14 @@ def generate_test_and_training_set_raw(img_dir, test_num=7):
     y_test = []
     label = 0
     for counter, png in enumerate(pngs):
-        if counter % 10 == 0 and counter != 0:
+        if counter % NUM_IMGS_PER_CLASS == 0 and counter != 0:
             label += 1
-        if counter % 10 == test_num:
+        if counter % NUM_IMGS_PER_CLASS == test_num:
             x_test.append(png)
             y_test.append(label)
         else:
             x_train.append(png)
             y_train.append(label)
-
     return (x_train, np.asarray(y_train), x_test, np.asarray(y_test))
 
 def generate_256x256_img(img_files):
@@ -67,8 +68,8 @@ def split_distance_matrix(distance_matrix, test_num=7):
     test_matrix = distance_matrix[test_num, :]
     slice = test_num
     slices = [slice]
-    for _ in range(7):
-        slice += 10
+    for _ in range(NUM_CLASSES-1):
+        slice += NUM_IMGS_PER_CLASS
         slices.append(slice)
         test_matrix = np.vstack((test_matrix, distance_matrix[slice, :]))
     train_matrix = np.delete(distance_matrix, slices, axis=0)
@@ -83,9 +84,9 @@ def split_image_matrix(imgs, test_num=7):
     y_test = []
     label = 0
     for count, img in enumerate(imgs):
-        if count % 10 == 0 and count != 0:
+        if count % NUM_IMGS_PER_CLASS == 0 and count != 0:
             label += 1
-        if count % 10 == test_num:
+        if count % NUM_IMGS_PER_CLASS == test_num:
             x_test.append(img)
             y_test.append(label)
         else:
@@ -110,7 +111,7 @@ def cross_validate_10_fold(model, data_dir, distance_matrix=None, PI=None):
     best_train_acc = 0
     worst_test_acc = 2 # larger than 100%
     worst_train_acc = 2
-    for y_loc in range(8):
+    for y_loc in range(NUM_IMGS_PER_CLASS):
         if PI is None:
             x_train, y_train, x_test, y_test = generate_test_and_training_set_raw(data_dir, test_num=y_loc)
         else:
@@ -189,18 +190,24 @@ def generate_PIs(raw_PDs,PI_dim=32, display_each_class=False):
     return np.asarray(PIs)
 
 def main():
-    ###PI dim0 SVM
-    PIs_dim0 = generate_PIs(convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0'))
-    optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_dim0, description="Persistent Images SVM in dim0")
+    for pi_dim in [2, 4, 8, 16, 32, 64, 128, 256]:
+        resolution = "Resolution: " + str(pi_dim) + "x" + str(pi_dim)
+        ###PI dim0 SVM
+        PIs_dim0 = generate_PIs(convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0'), PI_dim=pi_dim)
+        optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_dim0, description="Persistent Images SVM in dim0: " + resolution)
 
-    ###PI dim1 SVM
-    PIs_dim1 = generate_PIs(convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0'))
-    optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_dim1, description="Persistent Images SVM in dim1")
+        ###PI dim1 SVM
+        PIs_dim1 = generate_PIs(convert_ripser_to_np(RIPSER_OUTPUT, dim='dim0'), PI_dim=pi_dim)
+        optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_dim1, description="Persistent Images SVM in dim1: " + resolution)
 
-    ###Compbined PI for dim0 and dim1 SVM
-    PIs_combined = np.concatenate((PIs_dim0, PIs_dim1), axis=0)
-    optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_combined, description="Persistent Images SVM in dim0 and dim1")
-    
+        ###Compbined PI for dim0 and dim1 SVM
+        PIs_combined = np.concatenate((PIs_dim0, PIs_dim1), axis=0)
+        optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_combined, description="Persistent Images SVM in dim0 and dim1 by concat: " + resolution)
+
+        ###Linearly added PI for dim0 and dim1 SVM
+        PIs_sum = PIs_dim0 + PIs_dim1
+        optimize_C(png_dir=PNG_DIR, kernel=None, PI=PIs_sum, description="Persistent Images SVM in dim0 and dim1 by sum: " + resolution)
+
     ###Naive with raw images
     optimize_C(PNG_DIR, description="Raw image classification - RBF kernel with gamma=\'scale\'")
 

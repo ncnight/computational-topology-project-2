@@ -177,12 +177,14 @@ def visualize_original_mpeg_png(mpeg_loc):
     embedding = manifold.TSNE(n_components=2)
     transformed = embedding.fit_transform(dataset)
     plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
+    plt.title("Raw images scaled to 256x256 - t-SNE")
     plt.show()
 
     #MDS
     embedding = manifold.MDS(n_components=2)
     transformed = embedding.fit_transform(dataset)
     plt.scatter(transformed[:, 0], transformed[:, 1], c=colors8)
+    plt.title("Raw images scaled to 256x256 - MDS")
     plt.show()
 
 def main():
@@ -217,13 +219,13 @@ def main():
         plt.close(fig_was)
         fig_bottle = plt.figure(2)
         fig_bottle.suptitle("Bottleneck Graphs")
-        distance_matrix = run_hera(distance="geom_bottleneck", dim="dim1")
+        distance_matrix = run_hera(distance="geom_bottleneck", dim="dim0")
         plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (MDS)", fig_bottle, 221)
         plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (t-SNE)", fig_bottle, 222)
 
-        distance_matrix = run_hera(distance="geom_bottleneck", dim="dim0")
-        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (MDS)", fig_bottle, 223)
-        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 0 (t-SNE)", fig_bottle, 224)
+        distance_matrix = run_hera(distance="geom_bottleneck", dim="dim1")
+        plot_mds(distance_matrix, colors8, "Bottleneck Distance in Dim 1 (MDS)", fig_bottle, 223)
+        plot_tsne(distance_matrix, colors8, "Bottleneck Distance in Dim 1 (t-SNE)", fig_bottle, 224)
         plt.show()
     if '-vis-mpeg' in sys.argv:
         visualize_original_mpeg_png("../data/original_png/")
